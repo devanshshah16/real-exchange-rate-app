@@ -49,3 +49,11 @@ The app explains the number of months selected, data coverage, sample-average RE
 - a CSV download of the inputs and calculations.
 
 The index-average check should be approximately 100, subject to rounding. The worked calculation is a useful manual verification, but it does not independently validate whether the IMF source series have been mapped to the correct economic definitions. Verify the ER series dimensions and currency conventions against the IMF source.
+
+
+## Minimal UI behavior
+
+- The app shows only the comparison form until the user clicks **Analyze exchange rates**.
+- Results are grouped into collapsible sections: chart, calculation check, source details, data table, and CSV download.
+- The chart view can be Overview, Real index, or Nominal rate.
+- The date controls default to January 2015 through the current month; change them before analysis as needed.
