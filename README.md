@@ -36,3 +36,16 @@ Nominal FX is not normalized. In this version, cross-rates are formed from local
 If CPI requests fail, check the IMF `CPI` dataflow and country series key. If ER requests fail, inspect the ER dataflow dimensions and valid codelists in the IMF portal; do not assume the CPI key format applies to ER.
 
 Official IMF API information: https://data.imf.org/en/Resource-Pages/IMF-API
+
+
+## Beginner-friendly UI updates
+
+The interface defaults to United Kingdom as Country 1 and United States as Country 2, so the nominal quote should be USD per GBP when the returned FX series have the stated local-currency-per-USD convention.
+
+The app explains the number of months selected, data coverage, sample-average RER benchmark, and how to interpret the real index. It also displays:
+- a plain-English interpretation of the latest point in the chart;
+- a check that the real index averages 100 over valid observations;
+- one worked RER calculation using the selected sample's CPI and FX inputs;
+- a CSV download of the inputs and calculations.
+
+The index-average check should be approximately 100, subject to rounding. The worked calculation is a useful manual verification, but it does not independently validate whether the IMF source series have been mapped to the correct economic definitions. Verify the ER series dimensions and currency conventions against the IMF source.

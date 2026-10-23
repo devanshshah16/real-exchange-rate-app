@@ -35,7 +35,18 @@ TIMEOUT = 40
 
 st.set_page_config(page_title="IMF Real Exchange Rate Explorer", page_icon="🌐", layout="wide")
 st.title("🌐 Real Exchange Rate Explorer")
-st.caption("Monthly IMF CPI and exchange-rate data. Select two economies and a sample period to compare real and nominal exchange rates.")
+st.caption("A simple guide to how exchange rates change over time, after accounting for inflation.")
+with st.expander("How to use this app (start here)", expanded=True):
+    st.markdown(
+        """
+        1. **Choose two countries.** The exchange rate is shown as Country 2's currency for 1 unit of Country 1's currency.
+        2. **Choose the dates.** The app recalculates the real-exchange-rate benchmark for those months.
+        3. **Read the chart.** The nominal rate is the market exchange rate; the real index adjusts it using each country's CPI.
+        4. **Download the CSV** to inspect the data and calculations.
+
+        **Example:** If Country 1 is the United Kingdom and Country 2 is the United States, the nominal rate is **USD per GBP**.
+        """
+    )
 
 EURO_AREA = {"name": "Euro area", "iso3": "G163", "currency": "EUR"}
 COUNTRIES = [
@@ -215,11 +226,11 @@ def build_sample(c1: dict[str, str], c2: dict[str, str], start: date, end: date)
 
 with st.sidebar:
     st.header("Comparison settings")
-    default_1 = COUNTRY_NAMES.index("United States") if "United States" in COUNTRY_NAMES else 0
-    default_2 = COUNTRY_NAMES.index("India") if "India" in COUNTRY_NAMES else min(1, len(COUNTRY_NAMES) - 1)
+    default_1 = COUNTRY_NAMES.index("United Kingdom") if "United Kingdom" in COUNTRY_NAMES else 0
+    default_2 = COUNTRY_NAMES.index("United States") if "United States" in COUNTRY_NAMES else min(1, len(COUNTRY_NAMES) - 1)
     c1_name = st.selectbox("Country 1 (numerator CPI)", COUNTRY_NAMES, index=default_1)
     options_2 = [name for name in COUNTRY_NAMES if name != c1_name]
-    default_2_name = "India" if c1_name != "India" and "India" in options_2 else options_2[0]
+    default_2_name = "United States" if c1_name != "United States" and "United States" in options_2 else options_2[0]
     c2_name = st.selectbox("Country 2 (denominator CPI)", options_2, index=options_2.index(default_2_name))
     today = date.today()
     start_date = st.date_input("Start month", value=date(1976, 1, 1), min_value=date(1976, 1, 1), max_value=today)
@@ -246,20 +257,44 @@ if data.empty:
     st.stop()
 
 cur1, cur2 = currency_code(c1), currency_code(c2)
-m1, m2, m3, m4 = st.columns(4)
-m1.metric("Months in sample", f"{len(data):,}")
-m2.metric("Valid nominal FX months", f"{data['S_country2_per_country1'].notna().sum():,}")
-m3.metric("Valid real-index months", f"{data['Real_Index'].notna().sum():,}")
-m4.metric("Sample mean RER (RER*)", f"{rer_star:,.5g}" if pd.notna(rer_star) else "Unavailable")
-
 st.subheader(f"{c1['name']} → {c2['name']}")
-st.markdown(
-    f"**Nominal exchange rate:** units of {cur2} per 1 {cur1}. "
-    "The nominal series is displayed in actual units, not normalized."
+st.info(
+    f"**Reading the currency pair:** this app shows how many {cur2} you get for 1 {cur1}. "
+    f"For {c1['name']} as Country 1 and {c2['name']} as Country 2, that means "
+    f"**{cur2} per {cur1}**. The nominal rate is kept in actual currency units."
 )
+
+valid_nominal_count = int(data["S_country2_per_country1"].notna().sum())
+valid_real_count = int(data["Real_Index"].notna().sum())
+total_months = int(len(data))
+index_mean = data["Real_Index"].dropna().mean() if valid_real_count else float("nan")
+index_mean_text = f"{index_mean:.2f}" if pd.notna(index_mean) else "not available"
+
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("Months selected", f"{total_months:,}")
+m2.metric("Months with exchange-rate data", f"{valid_nominal_count:,}")
+m3.metric("Months usable for real index", f"{valid_real_count:,}")
+m4.metric("Average RER benchmark (RER*)", f"{rer_star:,.5g}" if pd.notna(rer_star) else "Unavailable")
+
 st.markdown(
-    "**Real index:** `100 × RER(t) / RER*`, where `RER*` is the arithmetic mean "
-    "of valid RER observations in the selected sample. Changing the dates recalculates it."
+    f"**What this means:** You selected {total_months} calendar months. "
+    f"The nominal exchange rate is available for {valid_nominal_count} of them. "
+    f"After requiring both countries' CPI and exchange-rate inputs, {valid_real_count} months can be used "
+    f"for the real index. Missing months are left blank, not guessed."
+)
+if pd.notna(rer_star):
+    st.markdown(
+        f"**About RER\*:** {rer_star:,.5g} is the average real-exchange-rate calculation "
+        f"over the {valid_real_count} valid months in this selected date range. "
+        "It is the benchmark used to set the real index to an average of 100."
+    )
+else:
+    st.warning("A real-exchange-rate benchmark cannot be calculated because this sample has no valid RER observations.")
+
+st.markdown(
+    "**How to read the real index:** 100 means equal to the selected-period average. "
+    "Above 100 means the calculated RER is above that average; below 100 means it is below that average. "
+    "This is a relative index, not a percentage change in the nominal exchange rate."
 )
 
 if chart_mode == "Both":
@@ -286,6 +321,29 @@ fig.update_layout(
 )
 st.plotly_chart(fig, use_container_width=True)
 
+# A quick explanation tied to the chart currently shown.
+if chart_mode in ("Real", "Both") and valid_real_count:
+    latest_real = data.dropna(subset=["Real_Index"]).iloc[-1]
+    latest_value = float(latest_real["Real_Index"])
+    latest_month = latest_real["date"].strftime("%B %Y")
+    if latest_value > 100:
+        real_interpretation = f"The latest available real index is **{latest_value:.1f}** ({latest_month}), above the selected-period average of 100."
+    elif latest_value < 100:
+        real_interpretation = f"The latest available real index is **{latest_value:.1f}** ({latest_month}), below the selected-period average of 100."
+    else:
+        real_interpretation = f"The latest available real index is **{latest_value:.1f}** ({latest_month}), approximately equal to the selected-period average of 100."
+    st.markdown("**What the real-index line suggests:** " + real_interpretation)
+
+if chart_mode in ("Nominal", "Both") and valid_nominal_count:
+    latest_nominal = data.dropna(subset=["S_country2_per_country1"]).iloc[-1]
+    nominal_value = float(latest_nominal["S_country2_per_country1"])
+    nominal_month = latest_nominal["date"].strftime("%B %Y")
+    st.markdown(
+        f"**What the nominal-rate line says:** In {nominal_month}, 1 {cur1} was equivalent to "
+        f"approximately **{nominal_value:,.4g} {cur2}** in the IMF series. "
+        "This is the nominal rate, so it does not adjust for differences in consumer prices."
+    )
+
 with st.expander("Data coverage and source details"):
     st.write("Data are requested from January 1976 onward, subject to series availability.")
     for source in sources:
@@ -293,6 +351,50 @@ with st.expander("Data coverage and source details"):
     st.write("Missing observations are not interpolated.")
     st.write("The nominal cross-rate is calculated as Country 2 local-currency units per USD divided by Country 1 local-currency units per USD.")
     st.warning("The IMF ER series key must be confirmed against the current ER data structure. If all candidate keys fail, the error panel lists the attempted keys.")
+
+st.subheader("Quick checks: does the calculation make sense?")
+
+# The mean of the index should be 100 over the valid observations used to compute RER*.
+if valid_real_count:
+    if abs(index_mean - 100) < 0.05:
+        st.success(f"**Sample-average check passed:** the real index averages {index_mean:.2f} across valid months (expected: 100).")
+    else:
+        st.warning(f"The real index averages {index_mean:.2f}, not 100. Check the RER inputs and missing values.")
+else:
+    st.warning("The average-index check cannot run because there are no valid real-index observations.")
+
+# Show one transparent worked example using an observation with every required input.
+calculation_rows = data.dropna(subset=[
+    "cpi_1", "cpi_2", "local_per_usd_1", "local_per_usd_2",
+    "S_country2_per_country1", "RER", "Real_Index"
+])
+if not calculation_rows.empty:
+    example = calculation_rows.iloc[0]
+    example_month = example["date"].strftime("%B %Y")
+    st.markdown(f"**One worked example ({example_month})**")
+    st.markdown(
+        f"- Country 1 CPI: **{example['cpi_1']:,.5g}**\n"
+        f"- Country 2 CPI: **{example['cpi_2']:,.5g}**\n"
+        f"- Country 1 local-currency units per USD: **{example['local_per_usd_1']:,.5g}**\n"
+        f"- Country 2 local-currency units per USD: **{example['local_per_usd_2']:,.5g}**"
+    )
+    st.code(
+        f"S = Country 2 local currency per USD / Country 1 local currency per USD\n"
+        f"  = {example['local_per_usd_2']:,.8g} / {example['local_per_usd_1']:,.8g}\n"
+        f"  = {example['S_country2_per_country1']:,.8g} {cur2} per {cur1}\n\n"
+        f"RER = S × CPI1 / CPI2\n"
+        f"    = {example['S_country2_per_country1']:,.8g} × {example['cpi_1']:,.8g} / {example['cpi_2']:,.8g}\n"
+        f"    = {example['RER']:,.8g}\n\n"
+        f"Real Index = 100 × RER / RER*\n"
+        f"           = 100 × {example['RER']:,.8g} / {rer_star:,.8g}\n"
+        f"           = {example['Real_Index']:,.4f}"
+    )
+    st.caption(
+        "This worked example uses the same CPI and FX inputs that appear in the CSV below. "
+        "The cross-rate formula assumes both FX series are local-currency units per USD."
+    )
+else:
+    st.info("A worked example will appear when the selected period contains a month with all CPI and FX inputs.")
 
 display = data[[
     "date", "cpi_1", "cpi_2", "local_per_usd_1", "local_per_usd_2",
