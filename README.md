@@ -57,3 +57,8 @@ The index-average check should be approximately 100, subject to rounding. The wo
 - Results are grouped into collapsible sections: chart, calculation check, source details, data table, and CSV download.
 - The chart view can be Overview, Real index, or Nominal rate.
 - The date controls default to January 2015 through the current month; change them before analysis as needed.
+
+
+## Subtle country silhouettes
+
+After a comparison is submitted, the app displays low-contrast silhouettes for both selected countries, using simplified Natural Earth GeoJSON outlines. They are decorative only and do not affect data or calculations. The outlines are loaded once and cached for 24 hours. The Euro area is a currency area rather than one country, so no single outline is shown for G163. If the outline source is unavailable, the app continues without it.

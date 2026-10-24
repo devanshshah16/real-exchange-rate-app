@@ -101,6 +101,123 @@ def currency_code(country: dict[str, str]) -> str:
     return country.get("currency") or CURRENCY_BY_COUNTRY.get(country["iso3"], country["iso3"])
 
 
+@st.cache_data(ttl=24 * 60 * 60, show_spinner=False)
+def _natural_earth_geojson() -> dict | None:
+    """Load simplified public country outlines once per day for decorative use."""
+    url = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson"
+    try:
+        response = requests.get(url, timeout=15)
+        response.raise_for_status()
+        return response.json()
+    except Exception:
+        return None
+
+
+def _country_outline_svg(iso3: str) -> str | None:
+    """Create a faint SVG outline for a country; no effect on calculations."""
+    if iso3 == "G163":  # Euro area is a currency area, not one country polygon.
+        return None
+    geo = _natural_earth_geojson()
+    if not geo:
+        return None
+
+    feature = None
+    for item in geo.get("features", []):
+        props = item.get("properties", {})
+        codes = {
+            str(props.get("ADM0_A3", "")), str(props.get("ISO_A3", "")),
+            str(props.get("ISO_A3_EH", "")), str(props.get("SOV_A3", "")),
+        }
+        if iso3 in codes:
+            feature = item
+            break
+    if feature is None:
+        return None
+
+    geom = feature.get("geometry") or {}
+    coords = geom.get("coordinates") or []
+    polygons = coords if geom.get("type") == "MultiPolygon" else [coords]
+    rings, points = [], []
+    for polygon in polygons:
+        if not polygon:
+            continue
+        ring = polygon[0]
+        if len(ring) >= 3:
+            rings.append(ring)
+            points.extend(ring)
+    if not points:
+        return None
+
+    min_lon, max_lon = min(p[0] for p in points), max(p[0] for p in points)
+    min_lat, max_lat = min(p[1] for p in points), max(p[1] for p in points)
+    lon_span, lat_span = max_lon - min_lon, max_lat - min_lat
+    if lon_span <= 0 or lat_span <= 0:
+        return None
+
+    vw, vh, pad = 320, 220, 10
+    scale = min((vw - 2 * pad) / lon_span, (vh - 2 * pad) / lat_span)
+    ox = (vw - lon_span * scale) / 2
+    oy = (vh - lat_span * scale) / 2
+    path_parts = []
+    for ring in rings:
+        commands = []
+        for idx, (lon, lat, *_) in enumerate(ring):
+            x = ox + (lon - min_lon) * scale
+            y = oy + (max_lat - lat) * scale
+            commands.append(("M" if idx == 0 else "L") + f"{x:.1f},{y:.1f}")
+        commands.append("Z")
+        path_parts.append(" ".join(commands))
+    path_data = " ".join(path_parts)
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 220" preserveAspectRatio="xMidYMid meet">'
+        f'<path d="{path_data}" fill="currentColor" fill-opacity="0.025" '
+        'stroke="currentColor" stroke-opacity="0.105" stroke-width="1.5" '
+        'stroke-linejoin="round" fill-rule="evenodd"/></svg>'
+    )
+
+
+def show_country_silhouettes(country1: dict[str, str], country2: dict[str, str]) -> None:
+    """Display selected-country silhouettes subtly, after the user submits the form."""
+    import base64
+
+    def background(svg: str | None) -> str:
+        if not svg:
+            return "none"
+        encoded = base64.b64encode(svg.encode("utf-8")).decode("ascii")
+        return f"url('data:image/svg+xml;base64,{encoded}')"
+
+    svg1 = _country_outline_svg(country1["iso3"])
+    svg2 = _country_outline_svg(country2["iso3"])
+    if not svg1 and not svg2:
+        st.caption("Country outlines are temporarily unavailable; the analysis is unaffected.")
+        return
+
+    st.markdown(
+        f"""
+        <style>
+          .country-silhouette-pair {{
+            display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+            gap:1rem; margin:.35rem 0 1rem; pointer-events:none;
+          }}
+          .country-silhouette-item {{ min-width:0; position:relative; overflow:hidden;
+            border-radius:12px; min-height:112px; display:flex; align-items:flex-end;
+            justify-content:center; border:1px solid rgba(128,128,128,.08); }}
+          .country-silhouette-art {{ position:absolute; inset:0; background-repeat:no-repeat;
+            background-position:center; background-size:contain; opacity:1; }}
+          .country-silhouette-name {{ position:relative; z-index:1; font-size:.72rem;
+            letter-spacing:.09em; text-transform:uppercase; opacity:.58;
+            padding:.45rem .7rem; text-align:center; }}
+          @media (max-width:640px) {{ .country-silhouette-item {{min-height:82px;}} }}
+        </style>
+        <div class="country-silhouette-pair" aria-hidden="true">
+          <div class="country-silhouette-item"><div class="country-silhouette-art" style="background-image:{background(svg1)}"></div><div class="country-silhouette-name">{country1['name']}</div></div>
+          <div class="country-silhouette-item"><div class="country-silhouette-art" style="background-image:{background(svg2)}"></div><div class="country-silhouette-name">{country2['name']}</div></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def parse_month(value: Any) -> pd.Timestamp | pd.NaT:
     """Parse IMF periods such as 2024-M01, 2024-01, or 2024."""
     if pd.isna(value):
@@ -286,6 +403,7 @@ chart_mode = st.segmented_control(
     help="Overview shows both series using separate axes.",
 ) or "Overview"
 c1, c2 = COUNTRY_BY_NAME[c1_name], COUNTRY_BY_NAME[c2_name]
+show_country_silhouettes(c1, c2)
 
 with st.spinner("Retrieving monthly CPI and exchange-rate series from the IMF…"):
     try:
