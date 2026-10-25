@@ -363,9 +363,11 @@ with st.form("comparison_form", clear_on_submit=False):
             help="The CPI for this country is P1.",
         )
     with col2:
-        c2_options = [name for name in COUNTRY_NAMES if name != c1_name] if c1_name else COUNTRY_NAMES
+        # Keep Country 2's options stable inside the form. Streamlit forms only
+        # rerun after submission, so dynamically changing this list based on
+        # Country 1 can reset Country 2 on the first submit.
         c2_name = st.selectbox(
-            "Country 2", c2_options, index=None,
+            "Country 2", COUNTRY_NAMES, index=None,
             placeholder="Choose the second country",
             help="The exchange rate is quoted as Country 2 currency per 1 unit of Country 1 currency.",
         )

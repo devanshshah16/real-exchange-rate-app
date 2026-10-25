@@ -62,3 +62,8 @@ The index-average check should be approximately 100, subject to rounding. The wo
 ## Subtle country silhouettes
 
 After a comparison is submitted, the app displays low-contrast silhouettes for both selected countries, using simplified Natural Earth GeoJSON outlines. They are decorative only and do not affect data or calculations. The outlines are loaded once and cached for 24 hours. The Euro area is a currency area rather than one country, so no single outline is shown for G163. If the outline source is unavailable, the app continues without it.
+
+
+## Country selection form fix
+
+Country 2 uses a stable list of country options while the form is open. The app checks after submission that Country 1 and Country 2 are different. This avoids Streamlit resetting the Country 2 selection on the first form submission when the options list changes dynamically.
