@@ -386,24 +386,37 @@ with st.form("comparison_form", clear_on_submit=False):
         )
     submitted = st.form_submit_button("Analyze exchange rates", type="primary", use_container_width=True)
 
-if not submitted:
+# A chart-view click causes Streamlit to rerun the script. Keep the last
+# submitted comparison in session_state so that rerun does not erase results.
+if submitted:
+    if not c1_name or not c2_name:
+        st.warning("Please choose both countries.")
+        st.stop()
+    if c1_name == c2_name:
+        st.warning("Please choose two different countries.")
+        st.stop()
+    if start_date > end_date:
+        st.warning("The start month must be on or before the end month.")
+        st.stop()
+
+    st.session_state["rer_analysis_config"] = {
+        "c1_name": c1_name,
+        "c2_name": c2_name,
+        "start_date": start_date,
+        "end_date": end_date,
+    }
+
+if "rer_analysis_config" not in st.session_state:
     st.info("Choose both countries and the date range, then select **Analyze exchange rates**. Results will appear here.")
     st.stop()
-if not c1_name or not c2_name:
-    st.warning("Please choose both countries.")
-    st.stop()
-if c1_name == c2_name:
-    st.warning("Please choose two different countries.")
-    st.stop()
-if start_date > end_date:
-    st.warning("The start month must be on or before the end month.")
-    st.stop()
 
-chart_mode = st.segmented_control(
-    "Chart view", ["Overview", "Real index", "Nominal rate"],
-    default="Overview",
-    help="Overview shows both series using separate axes.",
-) or "Overview"
+# Always use the last submitted values on reruns from chart controls.
+config = st.session_state["rer_analysis_config"]
+c1_name = config["c1_name"]
+c2_name = config["c2_name"]
+start_date = config["start_date"]
+end_date = config["end_date"]
+
 c1, c2 = COUNTRY_BY_NAME[c1_name], COUNTRY_BY_NAME[c2_name]
 show_country_silhouettes(c1, c2)
 
@@ -455,22 +468,35 @@ else:
 
 with st.expander("Exchange-rate chart", expanded=True):
     st.caption("The real index adjusts the exchange rate for CPI. The nominal rate stays in actual currency units.")
-    if chart_mode == "Overview":
-        fig = make_subplots(specs=[[{"secondary_y": True}]])
-        fig.add_trace(go.Scatter(x=data["date"], y=data["Real_Index"], name="Real index", mode="lines"), secondary_y=False)
-        fig.add_trace(go.Scatter(x=data["date"], y=data["S_country2_per_country1"], name=f"Nominal rate ({cur2}/{cur1})", mode="lines"), secondary_y=True)
-        fig.update_yaxes(title_text="Real index (average = 100)", secondary_y=False)
-        fig.update_yaxes(title_text=f"{cur2} per {cur1}", secondary_y=True)
-    elif chart_mode == "Real index":
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=data["date"], y=data["Real_Index"], name="Real index", mode="lines"))
-        fig.update_yaxes(title_text="Real index (average = 100)")
-    else:
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=data["date"], y=data["S_country2_per_country1"], name=f"Nominal rate ({cur2}/{cur1})", mode="lines"))
-        fig.update_yaxes(title_text=f"{cur2} per {cur1}")
-    fig.update_layout(title=None, xaxis_title=None, hovermode="x unified", legend_title=None, margin=dict(l=12, r=12, t=20, b=10), height=420)
-    st.plotly_chart(fig, use_container_width=True)
+    chart_controls, chart_area = st.columns([1, 4], gap="medium")
+    with chart_controls:
+        chart_mode = st.radio(
+            "Chart view",
+            ["Overview", "Real index", "Nominal rate"],
+            index=0,
+            key="rer_chart_view",
+            help="Change the chart view without submitting the country/date form again.",
+        )
+        st.markdown("**Quick guide**")
+        st.caption("Real index: inflation-adjusted; sample average = 100.")
+        st.caption("Nominal rate: actual currency units.")
+    with chart_area:
+        if chart_mode == "Overview":
+            fig = make_subplots(specs=[[{"secondary_y": True}]])
+            fig.add_trace(go.Scatter(x=data["date"], y=data["Real_Index"], name="Real index", mode="lines"), secondary_y=False)
+            fig.add_trace(go.Scatter(x=data["date"], y=data["S_country2_per_country1"], name=f"Nominal rate ({cur2}/{cur1})", mode="lines"), secondary_y=True)
+            fig.update_yaxes(title_text="Real index (average = 100)", secondary_y=False)
+            fig.update_yaxes(title_text=f"{cur2} per {cur1}", secondary_y=True)
+        elif chart_mode == "Real index":
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=data["date"], y=data["Real_Index"], name="Real index", mode="lines"))
+            fig.update_yaxes(title_text="Real index (average = 100)")
+        else:
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=data["date"], y=data["S_country2_per_country1"], name=f"Nominal rate ({cur2}/{cur1})", mode="lines"))
+            fig.update_yaxes(title_text=f"{cur2} per {cur1}")
+        fig.update_layout(title=None, xaxis_title=None, hovermode="x unified", legend_title=None, margin=dict(l=12, r=12, t=20, b=10), height=420)
+        st.plotly_chart(fig, use_container_width=True)
 
     if chart_mode in ("Overview", "Real index") and valid_real_count:
         latest_real = data.dropna(subset=["Real_Index"]).iloc[-1]

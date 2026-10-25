@@ -72,3 +72,8 @@ Country 2 uses a stable list of country options while the form is open. The app 
 ## Chart-control persistence fix
 
 The selected countries and date range are saved in Streamlit session state when the user submits the comparison. Changing the chart display control now reruns the page without clearing the last submitted analysis. The chart display selector is located beside the chart, inside the chart's collapsible section.
+
+
+## Persistent chart selector fix
+
+The last submitted country pair and date range are saved in `st.session_state`. Streamlit reruns the script when the chart-view radio button changes; the app now reloads the saved comparison on those reruns instead of stopping because the form-submit button is false. The chart-view radio is placed beside the chart.
