@@ -67,3 +67,8 @@ After a comparison is submitted, the app displays low-contrast silhouettes for b
 ## Country selection form fix
 
 Country 2 uses a stable list of country options while the form is open. The app checks after submission that Country 1 and Country 2 are different. This avoids Streamlit resetting the Country 2 selection on the first form submission when the options list changes dynamically.
+
+
+## Chart-control persistence fix
+
+The selected countries and date range are saved in Streamlit session state when the user submits the comparison. Changing the chart display control now reruns the page without clearing the last submitted analysis. The chart display selector is located beside the chart, inside the chart's collapsible section.
